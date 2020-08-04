@@ -6,7 +6,7 @@ assert() {
   ./9cc "$input" > tmp.s
   cc -o tmp tmp.s
   ./tmp
-  actual="$?" ## 通常$actualイコール$inputになる
+  actual="$?" ## 終了コード＝$expectedになるはず…
 
   if [ "$actual" = "$expected" ]; then
     echo "$input => $actual"
@@ -18,5 +18,7 @@ assert() {
 
 assert 0 0
 assert 42 42
+
+assert 21 "25+2-6"
 
 echo OK
