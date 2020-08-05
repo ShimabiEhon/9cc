@@ -25,13 +25,20 @@ struct TokenDummy
 // 現在着目しているトークン
 Token* token;
 
+// 入力プログラム
+char *user_input;
+
 // エラーを報告するための関数
-// printf と同じ引数を取る
-void error( char *fmt, ... )
+void error_at(char *loc, char* fmt, ...)
 {
 	va_list args;
 	va_start( args, fmt );
 
+	int pos = user_input - loc;
+
+	fprintf( stderr, "%s\n", user_input );
+	fprintf( stderr, "%*s", pos, " " ); // pos個の空白を表示
+	fprintf( stderr, "^ " );
 	vfprintf( stderr, fmt, args );
 	fprintf( stderr, "\n" );
 	exit(1);
@@ -44,6 +51,7 @@ bool consume(char op)
 	if( token->kind != TK_RESERVED || token->str[0] != op )
 		return false;
 	token = token->next;
+	user_input += 1;
 	return true;
 }
 
@@ -51,9 +59,10 @@ bool consume(char op)
 // それ以外の場合にはエラーを報告する。
 void expect(char op)
 {
-	if( token->kind != TK_RESERVED || token->str[0] != op )
-		error( "'%c'ではありません\n", op );
+	if(token->kind != TK_RESERVED || token->str[0] != op)
+		error_at(token->str, "'%c'ではありません\n", op );
 	token = token->next;
+	user_input += 1;
 }
 
 // 次のトークンが数値の場合、トークンを1つ読み進めてその数値を返す。
@@ -61,9 +70,13 @@ void expect(char op)
 long int expect_number()
 {
 	if( token->kind != TK_NUM )
-		error("数ではありません\n");
+		error_at(token->str, "数ではありません\n");
 	long int val = token->num;
 	token = token->next;
+
+	char cval[4];
+	sprintf(cval, "%ld", val);
+	user_input += strlen(cval);
 	return val;
 }
 
@@ -116,7 +129,7 @@ Token *tokenize(char *p)
 			continue;
 		}
 
-		error("トークナイズできません");
+		error_at(token->str, "トークナイズできません");
 	}
 
 	// cur->nextを設定
@@ -137,6 +150,7 @@ int main(int argc, char **argv)
 	printf("main:\n");
 
 	token = tokenize(argv[1]);
+	user_input = argv[1];
 
 	printf("	mov rax, %ld\n", expect_number() );
 
