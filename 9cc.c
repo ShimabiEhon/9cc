@@ -12,7 +12,17 @@ typedef enum
 	TK_EOF       // 入力の終わりを表すトークン
 }TokenKind;
 
+typedef enum
+{
+	ND_ADD,
+	ND_SUB,
+	ND_MUL,
+	ND_DIV,
+	ND_NUM,      // 整数トークン
+}NodeKind;
+
 typedef struct TokenDummy Token;
+typedef struct NodeDummy Node;
 
 struct TokenDummy
 {
@@ -22,8 +32,16 @@ struct TokenDummy
 	char *str;      // トークン文字列
 };
 
+struct NodeDummy
+{
+	NodeKind kind;
+	Node *lhs;
+	Node *rhs;
+	long int num;
+};
+
 // 現在着目しているトークン
-Token* token;
+Token *token;
 
 // 入力プログラム
 char *user_input;
@@ -34,7 +52,7 @@ void error_at(char *loc, char* fmt, ...)
 	va_list args;
 	va_start( args, fmt );
 
-	int pos = user_input - loc;
+	int pos = loc - user_input;
 
 	fprintf( stderr, "%s\n", user_input );
 	fprintf( stderr, "%*s", pos, " " ); // pos個の空白を表示
@@ -111,7 +129,7 @@ Token *tokenize(char *p)
 			continue;
 		}
 
-		if( *p == '+' || *p == '-' )
+		if( *p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' || *p == ')' )
 		{
 			// cur->nextを設定して、それをcurに代入している
 			cur = new_token( TK_RESERVED, cur, p );
@@ -138,6 +156,106 @@ Token *tokenize(char *p)
 	return head.next;
 }
 
+// 新しい記号ノードの作成
+Node *new_node(NodeKind kind, Node *lhs, Node *rhs)
+{
+	Node *node = calloc(1, sizeof(Node));
+
+	node->kind = kind;
+	node->lhs = lhs;
+	node->rhs = rhs;
+
+	return node;
+}
+
+// 新しい数値ノードの作成
+Node *new_node_num(long int num)
+{
+	Node* node = calloc(1, sizeof(Node));
+
+	node->kind = ND_NUM;
+	node->num = num;
+
+	return node;
+}
+
+Node *expr();
+Node *mul();
+Node *primary();
+
+// primary = num | "(" expr ")"
+Node* primary()
+{
+	if(consume('('))
+	{
+		Node *node = expr();
+		expect(')');
+		return node;
+	}
+
+	return new_node_num(expect_number());
+}
+
+// mul = primary ("*" primary | "/" primary)*
+Node* mul()
+{
+	Node* node = primary();
+
+	for(;;)
+	{
+		if(consume('*'))
+			node = new_node(ND_MUL, node, mul());
+		else if(consume('/'))
+			node = new_node(ND_DIV, node, mul());
+		else
+			return node;
+	}
+}
+
+// expr = mul ("+" mul | "-" mul)*
+Node *expr()
+{
+	Node *node = mul();
+
+	for(;;)
+	{
+		if(consume('+'))
+			node = new_node(ND_ADD, node, mul());
+		else if(consume('-'))
+			node = new_node(ND_SUB, node, mul());
+		else
+			return node;
+	}
+}
+
+void gen(Node* node)
+{
+	if(node->kind == ND_NUM)
+	{
+		printf("	mov rdx, %ld\n", node->num);
+		printf("	push rdx\n");
+		return;
+	}
+
+	gen(node->lhs);
+	gen(node->rhs);
+
+	printf("	pop rdi\n");
+	printf("	pop rax\n");
+
+	switch(node->kind)
+	{
+	case ND_ADD: printf("	add rax, rdi\n"); break;
+	case ND_SUB: printf("	sub rax, rdi\n"); break;
+	case ND_MUL: printf("	mul rdi\n"); break;
+	case ND_DIV:
+		printf("	cqo\n");
+		printf("	idiv rdi\n"); break;
+	}
+
+	printf("	push rax\n");
+}
+
 int main(int argc, char **argv)
 {
 	if (argc != 2) {
@@ -152,20 +270,11 @@ int main(int argc, char **argv)
 	token = tokenize(argv[1]);
 	user_input = argv[1];
 
-	printf("	mov rax, %ld\n", expect_number() );
+	Node* node = expr();
 
-	while( !at_eof() )
-	{
-		if( consume('+') ) // token->str[0]が'+'の時はconsume関数内でtokenを進めている
-		{
-			printf("	add rax, %ld\n", expect_number() ); // expect_number関数内でもtokenを進めている
-			continue;
-		}
+	gen(node);
 
-		expect('-'); // token->str[0]が'-'の時はexpect関数内でtokenを進めている
-		printf("	sub rax, %ld\n", expect_number() ); // expect_number関数内でもtokenを進めている
-	}
-
+	printf("	pop rax\n");
 	printf( "	ret\n");
 	return 0;
 }
