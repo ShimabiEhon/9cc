@@ -181,6 +181,7 @@ Node *new_node_num(long int num)
 
 Node *expr();
 Node *mul();
+Node *unary();
 Node *primary();
 
 // primary = num | "(" expr ")"
@@ -196,10 +197,20 @@ Node* primary()
 	return new_node_num(expect_number());
 }
 
-// mul = primary ("*" primary | "/" primary)*
+// unary = ("+" | "-")? primary
+Node *unary()
+{
+	if(consume('+')){}
+	else if(consume('-'))
+		return new_node(ND_SUB, new_node_num(0), primary());
+
+	return primary();
+}
+
+// mul = unary ("*" unary | "/" unary)*
 Node* mul()
 {
-	Node* node = primary();
+	Node* node = unary();
 
 	for(;;)
 	{
